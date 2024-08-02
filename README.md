@@ -8,4 +8,4 @@ This is made with Stable Baselines 3 using PPO reinforcment learning, a python g
 - the other files are helper classes
 ### What am I doing next?
 - The model currently overfits in the first level making it worse on other levels. I will probably fix this by implementing spaced repetition which basically means when it sees a different level, it will train on it for a while, and eventually going back to previous levels.
-- I also want to get this model to play on an actual emulator which would need to read the screen and press keyboard inputs, etc.
+- I also want to get this model to play on an emulator which would need to read the screen and press keyboard inputs, etc.
