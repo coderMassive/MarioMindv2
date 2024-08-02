@@ -52,7 +52,7 @@ while True:
         
         # performs action on environment
         if i == 0:
-            action, _states = model.predict([obs, prev_obs])
+            action, _states = model.predict([prev_obs, obs])
             prev_obs = obs
 
         _, _, done, _ = env.step(action.item())

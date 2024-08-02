@@ -12,16 +12,16 @@ from stable_baselines3 import PPO
 log_dir = './tmp/'
 
 def make_env():
-    mario_env = MarioEnv(skip=8)
+    mario_env = MarioEnv(skip=4)
     mario_env = JoypadSpace(mario_env, SIMPLE_MOVEMENT)
     env = RoboflowEnvironment(mario_env, "mario-ibyfv/2", api_key="ITukAND4XqHSos8UA9me", max_boxes=10)
     env = FrameStack(env, 2)
     return env
 
-env = DummyVecEnv([make_env for _ in range(2)])
+env = DummyVecEnv([make_env for _ in range(4)])
 env = VecMonitor(env, log_dir)
 
-model = PPO('MlpPolicy', env, learning_rate=0.00003, verbose=1)
+model = PPO('MlpPolicy', env, verbose=1)
 callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir='tmp/')
-model.learn(total_timesteps=500000, callback=callback)
+model.learn(total_timesteps=3000000000, callback=callback)
 model.save("./mario_model.zip")
