@@ -1,10 +1,24 @@
+import random
 from gym_super_mario_bros.smb_env import SuperMarioBrosEnv
 
 class MarioEnv(SuperMarioBrosEnv):
     def __init__(self, skip=1):
-        super(MarioEnv, self).__init__()
+        super(MarioEnv, self).__init__(target=self._random_target())
         self._skip = skip
         self.reward_range = (-30, 100)
+
+    @staticmethod
+    def _random_target():
+        world = random.randint(1, 8)
+        stage = random.randint(1, 4)
+        return (world, stage)
+
+    def _write_stage(self):
+        world, stage = self._random_target()
+        self._target_world = world
+        self._target_stage = stage
+        self._target_area = stage
+        super(MarioEnv, self)._write_stage()
 
     def _did_reset(self):
         super(MarioEnv, self)._did_reset()
@@ -59,7 +73,6 @@ class MarioEnv(SuperMarioBrosEnv):
             reward = -30
         self._action_last = self._action_current
         return reward
-        
 
     def _get_reward(self):
         return self._x_reward + self._score_reward + self._jump_penalty

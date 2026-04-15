@@ -2,7 +2,7 @@ from mario_env import MarioEnv
 from roboflow_env import RoboflowEnvironment
 from save_best_training import SaveOnBestTrainingRewardCallback
 from nes_py.wrappers import JoypadSpace
-from gymnasium.wrappers import FrameStack
+from gymnasium.wrappers import FrameStackObservation as FrameStack
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.vec_env import VecMonitor
