@@ -6,7 +6,6 @@ from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
 from gym_super_mario_bros.smb_env import SuperMarioBrosEnv
 from stable_baselines3 import PPO
 from nes_py.wrappers import JoypadSpace
-from inference import get_model
 
 MAX_BOXES = 10
 FPS = 60

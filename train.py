@@ -1,5 +1,5 @@
 from mario_env import MarioEnv
-from roboflow_env import RoboflowEnvironment
+from yolo_env import YOLOEnvironment
 from save_best_training import SaveOnBestTrainingRewardCallback
 from nes_py.wrappers import JoypadSpace
 from gymnasium.wrappers import FrameStackObservation as FrameStack
@@ -14,11 +14,11 @@ log_dir = './tmp/'
 def make_env():
     mario_env = MarioEnv(skip=4)
     mario_env = JoypadSpace(mario_env, SIMPLE_MOVEMENT)
-    env = RoboflowEnvironment(mario_env, "mario-ibyfv/2", api_key="ITukAND4XqHSos8UA9me", max_boxes=10)
+    env = YOLOEnvironment(mario_env, max_boxes=10)
     env = FrameStack(env, 2)
     return env
 
-env = DummyVecEnv([make_env for _ in range(4)])
+env = DummyVecEnv([make_env for _ in range(32)])
 env = VecMonitor(env, log_dir)
 
 model = PPO('MlpPolicy', env, verbose=1)

@@ -2,9 +2,19 @@ import numpy as np
 
 def process_results(results, max_boxes):
     detections = []
+    result = results[0]
+    
+    if result.boxes is not None:
+        # Get boxes in xywh format (center_x, center_y, width, height)
+        boxes = result.boxes.xywh.cpu().numpy()
+        confs = result.boxes.conf.cpu().numpy()
+        clss = result.boxes.cls.cpu().numpy()
 
-    for pred in results[0].predictions:
-        detections.append([pred.x, pred.y, pred.width, pred.height, pred.confidence, pred.class_id])
+        for i in range(len(boxes)):
+            x, y, w, h = boxes[i]
+            conf = confs[i]
+            cls = clss[i]
+            detections.append([x, y, w, h, conf, cls])
 
     detections = sorted(detections, key=lambda x: x[4], reverse=True)
     detections = detections[:max_boxes]
