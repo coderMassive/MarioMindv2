@@ -17,7 +17,6 @@ env = JoypadSpace(env, SIMPLE_MOVEMENT)
 model = PPO.load("./tmp/best_model.zip")
 img_model = get_model(model_id="mario-ibyfv/2", api_key="ITukAND4XqHSos8UA9me")
 
-images = []
 prev_obs = None
 
 env.reset()
@@ -48,7 +47,7 @@ while True:
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(image, f'{label}: {confidence:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        images.append(image)
+        env.render()
         
         # performs action on environment
         if i == 0:
@@ -63,10 +62,3 @@ while True:
     if done:
       break
 env.close()
-
-# write to mp4 file
-height, width, _ = images[0].shape
-vidwriter = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), FPS, (width, height))
-for image in images:
-    vidwriter.write(image)
-vidwriter.release()

@@ -20,6 +20,10 @@ class MarioEnv(SuperMarioBrosEnv):
         self._target_area = stage
         super(MarioEnv, self)._write_stage()
 
+    def reset(self, **kwargs):
+        self._write_stage()
+        return super(MarioEnv, self).reset(**kwargs)
+
     def _did_reset(self):
         super(MarioEnv, self)._did_reset()
         self._time_stop = None
@@ -32,7 +36,7 @@ class MarioEnv(SuperMarioBrosEnv):
     @property
     def _stuck(self):
         if self._x_position - self._x_stop > 1:
-            self._time_stop = None 
+            self._time_stop = None
             self._x_stop = self._x_position
             return False
         if self._time_stop is None:
@@ -57,9 +61,9 @@ class MarioEnv(SuperMarioBrosEnv):
 
         if self._stuck:
             info["truncated"] = True
-            
+
         return obs, reward, done, info
-    
+
     @property
     def _score_reward(self):
         reward = self._score - self._score_last
