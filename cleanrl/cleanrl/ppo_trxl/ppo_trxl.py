@@ -16,57 +16,53 @@ from minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from pom_env import PoMEnv  # noqa
 from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
-
-import register_mario
-
-import numpy as np
-import gymnasium as gym
 from gymnasium import spaces
 
-import numpy as np
-import gymnasium as gym
-from gymnasium import spaces
+import register_mario  # noqa: F401
+
 
 class GymnasiumSpaceCompatibility(gym.Wrapper):
+    """Convert old gym.spaces from nes_py/gym-super-mario-bros wrappers to gymnasium.spaces.
+
+    Apply this as the last env wrapper before RecordEpisodeStatistics/SyncVectorEnv.
+    """
+
     def __init__(self, env):
         super().__init__(env)
 
-        # Fix action space
         act = env.action_space
         if hasattr(act, "n"):
             self.action_space = spaces.Discrete(int(act.n))
+        elif hasattr(act, "nvec"):
+            self.action_space = spaces.MultiDiscrete(np.asarray(act.nvec, dtype=np.int64))
+        elif hasattr(act, "shape") and hasattr(act, "dtype"):
+            self.action_space = spaces.Box(
+                low=np.asarray(getattr(act, "low")),
+                high=np.asarray(getattr(act, "high")),
+                shape=act.shape,
+                dtype=act.dtype,
+            )
         else:
             self.action_space = act
 
-        # Fix observation space
         obs = env.observation_space
         if hasattr(obs, "shape") and hasattr(obs, "dtype"):
-            low = getattr(obs, "low", None)
-            high = getattr(obs, "high", None)
-
-            if low is not None and high is not None:
-                self.observation_space = spaces.Box(
-                    low=np.array(low),
-                    high=np.array(high),
-                    shape=obs.shape,
-                    dtype=obs.dtype,
-                )
-            else:
-                self.observation_space = spaces.Box(
-                    low=0,
-                    high=255,
-                    shape=obs.shape,
-                    dtype=obs.dtype if obs.dtype else np.uint8,
-                )
+            low = getattr(obs, "low", 0)
+            high = getattr(obs, "high", 255)
+            self.observation_space = spaces.Box(
+                low=np.asarray(low),
+                high=np.asarray(high),
+                shape=obs.shape,
+                dtype=obs.dtype if obs.dtype is not None else np.uint8,
+            )
         else:
             self.observation_space = obs
 
 
-import gymnasium as gym
-
 class OldJoypadResetCompatibility(gym.Wrapper):
+    """Let Gymnasium call reset(seed=..., options=...) on old nes_py JoypadSpace."""
+
     def reset(self, *, seed=None, options=None, **kwargs):
-        # Seed the underlying env if possible
         if seed is not None:
             try:
                 self.env.unwrapped.seed(seed)
@@ -77,6 +73,41 @@ class OldJoypadResetCompatibility(gym.Wrapper):
         if isinstance(obs, tuple) and len(obs) == 2:
             return obs
         return obs, {}
+
+
+class OldStepAPICompatibility(gym.Wrapper):
+    """Convert old Gym 4-tuple step output to Gymnasium 5-tuple output.
+
+    Also squeezes CleanRL's one-branch discrete action from shape (1,) to int for JoypadSpace.
+    """
+
+    def step(self, action):
+        if isinstance(action, np.ndarray) and action.shape == (1,):
+            action = int(action.item())
+        elif isinstance(action, (list, tuple)) and len(action) == 1:
+            action = int(action[0])
+
+        out = self.env.step(action)
+        if isinstance(out, tuple) and len(out) == 5:
+            return out
+
+        obs, reward, done, info = out
+        terminated = bool(done)
+        truncated = bool(info.pop("TimeLimit.truncated", False))
+
+        if info.get("truncated", False):
+            truncated = True
+            terminated = False
+
+        return obs, reward, terminated, truncated, info
+
+
+class MaxEpisodeStepsCompatibility(gym.Wrapper):
+    """Expose max_episode_steps for PPO-TrXL code paths that expect it as an attribute."""
+
+    def __init__(self, env, max_episode_steps):
+        super().__init__(env)
+        self.max_episode_steps = max_episode_steps
 
 @dataclass
 class Args:
@@ -161,11 +192,9 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-import numpy as np
-import gymnasium as gym
-from gymnasium import spaces
 
 def make_env(env_id, idx, capture_video, run_name, render_mode="debug_rgb_array"):
+    # CleanRL PPO-TrXL uses debug_rgb_array for Memory Gym. Mario only needs rgb_array.
     if render_mode == "debug_rgb_array":
         render_mode = "rgb_array"
 
@@ -178,7 +207,6 @@ def make_env(env_id, idx, capture_video, run_name, render_mode="debug_rgb_array"
         elif env_id == "RandomMario-v0":
             from nes_py.wrappers import JoypadSpace
             from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
-            from gymnasium.wrappers import FrameStack
 
             env = gym.make(
                 env_id,
@@ -186,12 +214,14 @@ def make_env(env_id, idx, capture_video, run_name, render_mode="debug_rgb_array"
                 disable_env_checker=True,
             )
 
+            # Keep Mario as one full-size, full-color frame: (H, W, 3).
+            # Do not resize, grayscale, or frame-stack here; Transformer-XL supplies temporal memory.
             env = JoypadSpace(env, SIMPLE_MOVEMENT)
             env = OldJoypadResetCompatibility(env)
-            env = gym.wrappers.TimeLimit(env, max_episode_steps=5000)
-            env = FrameStack(env, 2)
+            env = OldStepAPICompatibility(env)
 
-            # 🔑 CRITICAL FIX
+            env = gym.wrappers.TimeLimit(env, max_episode_steps=5000)
+            env = MaxEpisodeStepsCompatibility(env, max_episode_steps=5000)
             env = GymnasiumSpaceCompatibility(env)
 
         else:
@@ -204,8 +234,7 @@ def make_env(env_id, idx, capture_video, run_name, render_mode="debug_rgb_array"
         if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
 
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        return env
+        return gym.wrappers.RecordEpisodeStatistics(env)
 
     return thunk
 
@@ -354,6 +383,9 @@ class Agent(nn.Module):
                 nn.ReLU(),
                 layer_init(nn.Conv2d(64, 64, 3, stride=1)),
                 nn.ReLU(),
+                # Full-size Mario frames are larger than Atari-style 84x84 inputs.
+                # Pool to the expected 7x7 feature map before the linear layer.
+                nn.AdaptiveAvgPool2d((7, 7)),
                 nn.Flatten(),
                 layer_init(nn.Linear(64 * 7 * 7, args.trxl_dim)),
                 nn.ReLU(),
@@ -473,11 +505,12 @@ if __name__ == "__main__":
     env_ids = range(args.num_envs)
     env_current_episode_step = torch.zeros((args.num_envs,), dtype=torch.long)
     # Determine maximum episode steps
-    max_episode_steps = envs.envs[0].spec.max_episode_steps
+    spec = getattr(envs.envs[0], "spec", None)
+    max_episode_steps = getattr(spec, "max_episode_steps", None) if spec is not None else None
     if not max_episode_steps:
         envs.envs[0].reset()  # Memory Gym envs need to be reset before accessing max_episode_steps
-        max_episode_steps = envs.envs[0].max_episode_steps
-    if max_episode_steps <= 0:
+        max_episode_steps = getattr(envs.envs[0], "max_episode_steps", None)
+    if not max_episode_steps or max_episode_steps <= 0:
         max_episode_steps = 1024  # Memory Gym envs have max_episode_steps set to -1
     # Set transformer memory length to max episode steps if greater than max episode steps
     args.trxl_memory_length = min(args.trxl_memory_length, max_episode_steps)
@@ -728,8 +761,8 @@ if __name__ == "__main__":
             "{:9} SPS={:4} return={:.2f} length={:.1f} pi_loss={:.3f} v_loss={:.3f} entropy={:.3f} r_loss={:.3f} value={:.3f} adv={:.3f}".format(
                 iteration,
                 int(global_step / (time.time() - start_time)),
-                episode_result["r_mean"],
-                episode_result["l_mean"],
+                episode_result.get("r_mean", 0.0),
+                episode_result.get("l_mean", 0.0),
                 pg_loss.item(),
                 v_loss.item(),
                 entropy_loss.item(),
@@ -768,3 +801,4 @@ if __name__ == "__main__":
 
     writer.close()
     envs.close()
+
